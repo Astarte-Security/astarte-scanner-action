@@ -1,0 +1,33 @@
+{
+  "name": "astarte-scanner-action",
+  "version": "1.0.0",
+  "description": "A GitHub Action that automatically scans your code for security vulnerabilities using Semgrep and uploads results to the Astarte ASPM platform.",
+  "main": "index.js",
+  "scripts": {
+    "build": "esbuild index.js --bundle --platform=node --target=node20 --outfile=dist/index.js --minify",
+    "watch": "esbuild index.js --bundle --platform=node --target=node20 --outfile=dist/index.js --watch",
+    "build:dev": "esbuild index.js --bundle --platform=node --target=node20 --outfile=dist/index.js --sourcemap"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Astarte-Security/astarte-scanner-action.git"
+  },
+  "keywords": ["security", "sast", "aspm", "semgrep", "opengrep"],
+  "author": "Astarte Security",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Astarte-Security/astarte-scanner-action/issues"
+  },
+  "homepage": "https://github.com/Astarte-Security/astarte-scanner-action#readme",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/exec": "^1.1.1",
+    "@actions/github": "^6.0.1",
+    "@octokit/auth-app": "^8.1.1",
+    "@octokit/rest": "^22.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.11"
+  }
+}

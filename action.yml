@@ -1,0 +1,53 @@
+name: 'The Oracle of Astarte'
+description: 'Scans code and uploads results to the Astarte platform'
+author: 'Astarte Security'
+
+branding:
+  icon: 'loader'
+  color: 'purple'
+
+inputs:
+  aspm_url:
+    description: 'Your Astarte platform URL'
+    required: true
+    default: 'https://astarte-security.com'
+  
+  app_id:
+    description: 'GitHub App ID (provided by the Astarte platform)'
+    required: true
+  
+  private_key:
+    description: 'GitHub App private key (provided by the Astarte platform)'
+    required: true
+  
+  installation_id:
+    description: 'GitHub App installation ID (provided by the Astarte platform)'
+    required: true
+
+  webhook_token:
+    description: 'Webhook authentication token for uploading scan results to Astarte'
+    required: true
+
+  severity_threshold:
+    description: 'Fail on findings at or above this severity (low, medium, high, critical)'
+    required: false
+    default: 'high'
+  
+  config:
+    description: 'Semgrep config (auto, p/security-audit, p/owasp-top-ten, etc.)'
+    required: false
+    default: 'auto'
+
+outputs:
+  findings_count:
+    description: 'Total number of findings'
+  
+  high_severity_count:
+    description: 'Number of high severity findings'
+  
+  scan_url:
+    description: 'URL to view full scan results on the Astarte platform'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
