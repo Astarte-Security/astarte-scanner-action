@@ -1,6 +1,6 @@
 {
   "name": "astarte-scanner-action",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "A GitHub Action that automatically scans your code for security vulnerabilities using Semgrep and uploads results to the Astarte ASPM platform.",
   "main": "index.js",
   "scripts": {

@@ -4,7 +4,6 @@ const exec = require('@actions/exec');
 const { createAppAuth } = require('@octokit/auth-app');
 const { Octokit } = require('@octokit/rest');
 const fs = require('fs');
-const https = require('https');
 
 async function run() {
   try {
@@ -217,60 +216,32 @@ function generateSummary(severityCounts, scanUrl) {
 `;
 }
 
-function uploadToASPM(aspmUrl, webhookToken, sarifContent, context) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({
-      repository: `${context.repo.owner}/${context.repo.repo}`,
-      commit_sha: context.sha,
-      scan_tool: 'semgrep',
-      format: 'sarif',
-      results: sarifContent,
-      ref: context.ref,
-      pr_number: context.payload.pull_request?.number
-    });
+async function uploadToASPM(aspmUrl, webhookToken, sarifContent, context) {
+  const payload = {
+    repository: process.env.GITHUB_REPOSITORY,  // "owner/repo"
+    commit_sha: process.env.GITHUB_SHA,
+    scan_tool: 'semgrep',
+    format: 'sarif',
+    results: sarifContent
+  };
 
-    const url = new URL('/api/v1/scan_results', aspmUrl);
-
-    const options = {
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${webhookToken}`,
-        'Content-Type': 'application/json',
-        'Content-Length': data.length,
-        'User-Agent': 'Astarte-GitHub-Action'
-      }
-    };
-    
-    const req = https.request(options, (res) => {
-      let responseData = '';
-      
-      res.on('data', (chunk) => {
-        responseData += chunk;
-      });
-      
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          try {
-            resolve(JSON.parse(responseData));
-          } catch (e) {
-            resolve({ scan_url: aspmUrl });
-          }
-        } else {
-          reject(new Error(`Upload failed with status ${res.statusCode}: ${responseData}`));
-        }
-      });
-    });
-    
-    req.on('error', (error) => {
-      reject(error);
-    });
-    
-    req.write(data);
-    req.end();
+  const response = await fetch(`${aspmUrl}/api/v1/scan_results`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${webhookToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload)
   });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+  }
+
+  const result = await response.json();
+  core.info('Upload successful:', JSON.stringify(result));
+  return result;
 }
 
 run();
