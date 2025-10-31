@@ -241,11 +241,16 @@ async function run() {
 
     core.info(`✅ Check run updated with ${prAnnotations.length} annotations`);
 
-    // Post PR comment if this is a PR
+    // Post PR comment and inline annotations if this is a PR
     if (isPR) {
       core.info('💬 Posting summary comment on PR...');
       await postPRComment(octokit, context, prSeverityCounts, otherFindings.length, scanUrl, prAnnotations, findings.length);
       core.info('✅ PR comment posted');
+
+      // Create inline review comments in the "Files changed" tab
+      core.info('📝 Creating inline review comments...');
+      await createInlineReviewComments(octokit, context, prAnnotations);
+      core.info('✅ Inline review comments posted');
     }
 
     // Set outputs
@@ -357,11 +362,80 @@ function generateSummary(severityCounts, prSeverityCounts, isPR, otherCount, sca
   return summary;
 }
 
+async function createInlineReviewComments(octokit, context, prAnnotations) {
+  if (prAnnotations.length === 0) {
+    core.info('No annotations to post as inline comments');
+    return;
+  }
+
+  // Format annotations as review comments
+  const reviewComments = prAnnotations.map(annotation => {
+    const emoji = annotation.severity === 'critical' || annotation.severity === 'high' ? '🔴' :
+                  annotation.severity === 'medium' ? '🟡' : '🔵';
+
+    return {
+      path: annotation.path,
+      line: annotation.end_line,  // Use end_line for the comment position
+      side: 'RIGHT',  // Comment on the new version of the file
+      body: `${emoji} **${annotation.title}**\n\n${annotation.message}\n\n_Severity: ${annotation.severity}_`
+    };
+  });
+
+  // GitHub allows up to 30 comments per review
+  const batchSize = 30;
+  const batches = [];
+  for (let i = 0; i < reviewComments.length; i += batchSize) {
+    batches.push(reviewComments.slice(i, i + batchSize));
+  }
+
+  core.info(`Creating ${batches.length} review(s) with ${reviewComments.length} inline comments...`);
+
+  // Create a review for each batch
+  for (let i = 0; i < batches.length; i++) {
+    try {
+      await octokit.pulls.createReview({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        pull_number: context.payload.pull_request.number,
+        commit_id: context.payload.pull_request.head.sha,
+        event: 'COMMENT',  // Use 'COMMENT' to not request changes or approve
+        body: i === 0 ? '🛡️ **Astarte Security Findings**\n\nSee inline comments below for details on each finding.' : undefined,
+        comments: batches[i]
+      });
+      core.info(`Review ${i + 1}/${batches.length} created with ${batches[i].length} comments`);
+    } catch (error) {
+      // Log error but continue - some comments might fail if lines are out of range
+      core.warning(`Failed to create review batch ${i + 1}: ${error.message}`);
+
+      // Try to post individual comments for this batch if batch fails
+      if (error.status === 422) {
+        core.info('Attempting to post comments individually...');
+        for (const comment of batches[i]) {
+          try {
+            await octokit.pulls.createReviewComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              commit_id: context.payload.pull_request.head.sha,
+              path: comment.path,
+              line: comment.line,
+              side: comment.side,
+              body: comment.body
+            });
+          } catch (individualError) {
+            core.warning(`Failed to post comment on ${comment.path}:${comment.line} - ${individualError.message}`);
+          }
+        }
+      }
+    }
+  }
+}
+
 async function postPRComment(octokit, context, prSeverityCounts, otherCount, scanUrl, prAnnotations, totalFindings) {
   const prTotal = prSeverityCounts.critical + prSeverityCounts.high + prSeverityCounts.medium + prSeverityCounts.low;
-  
+
   let body = '## 🛡️ Astarte Security Scan\n\n';
-  
+
   if (prTotal === 0 && totalFindings === 0) {
     body += '✅ **No security vulnerabilities found!**\n\n';
     body += 'Your code looks secure. Great job! 🎉\n\n';
@@ -370,13 +444,13 @@ async function postPRComment(octokit, context, prSeverityCounts, otherCount, sca
     body += `ℹ️ Note: ${otherCount} existing findings in other files (not related to this PR).\n\n`;
   } else {
     const highCount = prSeverityCounts.critical + prSeverityCounts.high;
-    
+
     if (highCount > 0) {
       body += `🔴 **Found ${highCount} high/critical severity issues that need attention:**\n\n`;
     } else {
       body += `⚠️ **Found ${prTotal} security findings:**\n\n`;
     }
-    
+
     body += '| Severity | Count |\n';
     body += '|----------|-------|\n';
     if (prSeverityCounts.critical > 0) {
@@ -392,31 +466,32 @@ async function postPRComment(octokit, context, prSeverityCounts, otherCount, sca
       body += `| 🔵 Low | ${prSeverityCounts.low} |\n`;
     }
     body += '\n';
-    
+
     // Add top 5 findings
     if (prAnnotations.length > 0) {
       body += '### 📍 Top Findings:\n\n';
       const topFindings = prAnnotations.slice(0, 5);
       topFindings.forEach((finding, index) => {
-        const emoji = finding.severity === 'critical' || finding.severity === 'high' ? '🔴' : 
+        const emoji = finding.severity === 'critical' || finding.severity === 'high' ? '🔴' :
                      finding.severity === 'medium' ? '🟡' : '🔵';
         body += `${index + 1}. ${emoji} **${finding.title}** in \`${finding.path}:${finding.start_line}\`\n`;
         body += `   ${finding.message}\n\n`;
       });
-      
+
       if (prAnnotations.length > 5) {
         body += `_...and ${prAnnotations.length - 5} more findings_\n\n`;
       }
     }
-    
+
     if (otherCount > 0) {
       body += `ℹ️ **Note:** ${otherCount} additional findings in files not changed by this PR.\n\n`;
     }
   }
-  
+
   body += `---\n`;
+  body += `💬 Check the "Files changed" tab for inline comments on each finding.\n\n`;
   body += `[📊 View detailed report on Astarte →](${scanUrl})\n`;
-  
+
   try {
     // Check if we already commented
     const { data: comments } = await octokit.issues.listComments({
@@ -424,12 +499,12 @@ async function postPRComment(octokit, context, prSeverityCounts, otherCount, sca
       repo: context.repo.repo,
       issue_number: context.payload.pull_request.number
     });
-    
-    const existingComment = comments.find(comment => 
+
+    const existingComment = comments.find(comment =>
       comment.body.includes('🛡️ Astarte Security Scan') &&
       comment.user.type === 'Bot'
     );
-    
+
     if (existingComment) {
       // Update existing comment
       await octokit.issues.updateComment({

@@ -1,6 +1,6 @@
 {
   "name": "astarte-scanner-action",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "A GitHub Action that automatically scans your code for security vulnerabilities using Semgrep and uploads results to the Astarte ASPM platform.",
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,13 @@
     "type": "git",
     "url": "git+https://github.com/Astarte-Security/astarte-scanner-action.git"
   },
-  "keywords": ["security", "sast", "aspm", "semgrep", "opengrep"],
+  "keywords": [
+    "security",
+    "sast",
+    "aspm",
+    "semgrep",
+    "opengrep"
+  ],
   "author": "Astarte Security",
   "license": "ISC",
   "type": "commonjs",
